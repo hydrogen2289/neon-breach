@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Neon Breach — Tactical FPS</title>
+<style>
+  :root {
+    --cyan: #22e6ff; --magenta: #ff2d95; --amber: #ffb020;
+    --panel: rgba(8, 12, 28, 0.82); --line: rgba(34, 230, 255, 0.45);
+  }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #05060f;
+    font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif; color: #dfe9ff; }
+  #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+  #status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+  /* ---------- HUD ---------- */
+  #hud { position: fixed; inset: 0; pointer-events: none; display: none; z-index: 5; }
+  #hud.on { display: block; }
+  .hud-top { position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 18px; align-items: center; background: var(--panel);
+    border: 1px solid var(--line); border-radius: 6px; padding: 8px 18px; }
+  .hud-top .cell { text-align: center; min-width: 64px; }
+  .hud-top .label { font-size: 10px; letter-spacing: 2px; color: #8fb8d8; text-transform: uppercase; }
+  .hud-top .value { font-size: 20px; font-weight: 700; color: #fff; }
+  .hud-top .value.cyan { color: var(--cyan); }
+  .hud-top .value.magenta { color: var(--magenta); }
+  #hud-timer.warn { color: var(--amber); }
+  #hud-timer.low { color: #ff4040; animation: blink 0.8s steps(2) infinite; }
+  @keyframes blink { 50% { opacity: 0.35; } }
+
+  #hud-credits { position: absolute; top: 14px; right: 16px; background: var(--panel);
+    border: 1px solid var(--line); border-radius: 6px; padding: 8px 14px; font-size: 15px; }
+  #hud-credits b { color: var(--amber); font-size: 18px; }
+  #killfeed { position: absolute; top: 64px; right: 16px; width: 300px; text-align: right;
+    font-size: 13px; line-height: 1.7; }
+  #killfeed div { background: rgba(8, 12, 28, 0.7); border-radius: 4px; padding: 2px 8px;
+    margin-bottom: 4px; display: inline-block; }
+  #killfeed .cyan { color: var(--cyan); } #killfeed .magenta { color: var(--magenta); }
+
+  #hud-bottom { position: absolute; left: 18px; bottom: 16px; width: 300px; }
+  #hud-weapon { font-size: 15px; font-weight: 700; letter-spacing: 1px; color: #fff; margin-bottom: 5px; }
+  #hud-healthbar { height: 12px; background: rgba(255,255,255,0.12); border: 1px solid var(--line);
+    border-radius: 3px; overflow: hidden; }
+  #hud-healthfill { height: 100%; width: 100%; background: linear-gradient(90deg, #19d3ff, #22e6ff);
+    transition: width 0.15s; }
+  #hud-healthfill.low { background: linear-gradient(90deg, #ff4040, #ff7a40); }
+  #hud-health { font-size: 13px; margin-top: 4px; color: #bfe6ff; }
+  #hud-ammo { position: absolute; right: 18px; bottom: 16px; text-align: right; }
+  #hud-ammo .big { font-size: 34px; font-weight: 800; color: #fff; line-height: 1; }
+  #hud-ammo .small { font-size: 14px; color: #8fb8d8; }
+  #hud-ammo .reload { font-size: 13px; color: var(--amber); letter-spacing: 2px; }
+
+  #crosshair { position: absolute; left: 50%; top: 50%; width: 22px; height: 22px;
+    transform: translate(-50%, -50%); }
+  #crosshair::before, #crosshair::after { content: ""; position: absolute; background: var(--cyan);
+    box-shadow: 0 0 6px var(--cyan); }
+  #crosshair::before { left: 10px; top: 0; width: 2px; height: 22px; }
+  #crosshair::after { left: 0; top: 10px; width: 22px; height: 2px; }
+  #hitmarker { position: absolute; left: 50%; top: 50%; width: 26px; height: 26px;
+    transform: translate(-50%, -50%) rotate(45deg); opacity: 0; }
+  #hitmarker::before, #hitmarker::after { content: ""; position: absolute; background: #fff;
+    box-shadow: 0 0 8px #fff; }
+  #hitmarker::before { left: 12px; top: 0; width: 2px; height: 26px; }
+  #hitmarker::after { left: 0; top: 12px; width: 26px; height: 2px; }
+  #hitmarker.kill::before, #hitmarker.kill::after { background: #ff4040; box-shadow: 0 0 8px #ff4040; }
+  #vignette { position: absolute; inset: 0; pointer-events: none; opacity: 0;
+    background: radial-gradient(ellipse at center, transparent 55%, rgba(255, 30, 60, 0.55) 100%); }
+  #banner { position: absolute; left: 50%; top: 26%; transform: translate(-50%, -50%);
+    font-size: 42px; font-weight: 900; letter-spacing: 6px; color: #fff;
+    text-shadow: 0 0 18px var(--cyan), 0 2px 0 rgba(0,0,0,0.6); opacity: 0; text-align: center; }
+  #banner small { display: block; font-size: 16px; letter-spacing: 3px; color: var(--amber);
+    text-shadow: none; margin-top: 8px; }
+  #hint { position: absolute; left: 50%; bottom: 96px; transform: translateX(-50%);
+    font-size: 13px; color: #9fc3e8; background: rgba(8,12,28,0.6); padding: 5px 12px; border-radius: 4px; }
+
+  /* ---------- Screens ---------- */
+  .screen { position: fixed; inset: 0; z-index: 10; display: none;
+    align-items: center; justify-content: center; flex-direction: column; text-align: center;
+    background: radial-gradient(ellipse at 50% 30%, rgba(20, 40, 90, 0.88), rgba(3, 4, 12, 0.96)); }
+  .screen.on { display: flex; }
+  .screen h1 { font-size: 64px; margin: 0; letter-spacing: 8px; font-weight: 900; color: #fff;
+    text-shadow: 0 0 24px var(--cyan), 0 0 60px rgba(34, 230, 255, 0.5); }
+  .screen h1 .pink { color: var(--magenta); text-shadow: 0 0 24px var(--magenta); }
+  .screen h2 { font-size: 30px; margin: 0 0 10px; letter-spacing: 4px; color: #fff; }
+  .screen p { color: #a9c6e8; font-size: 15px; line-height: 1.7; max-width: 560px; margin: 10px 0; }
+  .screen .tag { color: var(--amber); letter-spacing: 3px; font-size: 13px; text-transform: uppercase; }
+  .btn { pointer-events: auto; cursor: pointer; margin-top: 22px; font-size: 18px; font-weight: 800;
+    letter-spacing: 3px; color: #04121a; background: var(--cyan); border: none; border-radius: 6px;
+    padding: 14px 44px; box-shadow: 0 0 22px rgba(34, 230, 255, 0.55); }
+  .btn:hover { background: #6ff0ff; }
+  .btn.ghost { background: transparent; color: var(--cyan); border: 1px solid var(--cyan); box-shadow: none; }
+  .controls { display: grid; grid-template-columns: auto auto; gap: 4px 22px; text-align: left;
+    font-size: 14px; color: #c9dcf5; margin-top: 18px; }
+  .controls b { color: var(--cyan); font-weight: 700; }
+  .buy-grid { display: flex; gap: 12px; margin-top: 18px; flex-wrap: wrap; justify-content: center; }
+  .buy-card { pointer-events: auto; cursor: pointer; width: 150px; background: var(--panel);
+    border: 1px solid var(--line); border-radius: 8px; padding: 12px; text-align: left; }
+  .buy-card:hover { border-color: var(--cyan); }
+  .buy-card.owned { border-color: var(--amber); }
+  .buy-card.cant { opacity: 0.45; cursor: default; }
+  .buy-card h3 { margin: 0 0 4px; font-size: 15px; color: #fff; }
+  .buy-card .price { color: var(--amber); font-weight: 800; font-size: 15px; }
+  .buy-card .stats { font-size: 12px; color: #9fc3e8; line-height: 1.6; margin-top: 4px; }
+  .buy-card .key { float: right; color: var(--cyan); font-weight: 700; }
+  #buy-credits { color: var(--amber); font-size: 18px; font-weight: 800; margin-top: 8px; }
+  .score-line { font-size: 22px; font-weight: 800; color: #fff; margin-top: 6px; }
+  .score-line .cyan { color: var(--cyan); } .score-line .magenta { color: var(--magenta); }
+</style>
+</head>
+<body>
+<canvas id="game" aria-label="Neon Breach: a tactical first-person shooter. Move with W A S D, aim with the mouse, click to shoot."></canvas>
+<p id="status" role="status" aria-live="polite"></p>
+
+<div id="hud">
+  <div class="hud-top">
+    <div class="cell"><div class="label">Round</div><div class="value" id="hud-round">1</div></div>
+    <div class="cell"><div class="label">You</div><div class="value cyan" id="hud-score-you">0</div></div>
+    <div class="cell"><div class="label">Timer</div><div class="value" id="hud-timer">100</div></div>
+    <div class="cell"><div class="label">Enemy</div><div class="value magenta" id="hud-score-foe">0</div></div>
+    <div class="cell"><div class="label">Alive</div><div class="value" id="hud-alive">5 : 5</div></div>
+  </div>
+  <div id="hud-credits">CREDITS <b id="hud-credits-value">800</b></div>
+  <div id="killfeed"></div>
+  <div id="hud-bottom">
+    <div id="hud-weapon">P-9 SPARK</div>
+    <div id="hud-healthbar"><div id="hud-healthfill"></div></div>
+    <div id="hud-health">HP 100</div>
+  </div>
+  <div id="hud-ammo"><div class="big"><span id="hud-ammo-mag">12</span><span class="small"> / <span id="hud-ammo-reserve">∞</span></span></div><div class="reload" id="hud-reload"></div></div>
+  <div id="crosshair"></div>
+  <div id="hitmarker"></div>
+  <div id="vignette"></div>
+  <div id="banner"></div>
+  <div id="hint">WASD move &nbsp;·&nbsp; SHIFT sprint &nbsp;·&nbsp; SPACE jump &nbsp;·&nbsp; R reload &nbsp;·&nbsp; B buy menu</div>
+</div>
+
+<div class="screen on" id="screen-title">
+  <div class="tag">make.fun best-game-01 · original tactical FPS</div>
+  <h1>NEON <span class="pink">BREACH</span></h1>
+  <p>Five rounds decide the match. You and four squad bots breach the neon arena against five
+     enemy bots. Eliminate the enemy team to take the round — first to 5 round wins takes the match.
+     Kills earn credits; spend them on better guns between rounds.</p>
+  <div class="controls">
+    <span><b>W A S D</b> move</span><span><b>Mouse</b> aim</span>
+    <span><b>Click</b> shoot</span><span><b>R</b> reload</span>
+    <span><b>Shift</b> sprint</span><span><b>Space</b> jump</span>
+    <span><b>B</b> buy menu</span><span><b>Esc</b> release mouse</span>
+  </div>
+  <button class="btn" id="btn-deploy">▶ &nbsp;DEPLOY</button>
+</div>
+
+<div class="screen" id="screen-buy">
+  <div class="tag">Buy phase — round <span id="buy-round">2</span></div>
+  <h2>ARMORY</h2>
+  <p>Spend your credits. Click a card or press its number key. Your squad keeps its guns between rounds.</p>
+  <div id="buy-credits">CREDITS 800</div>
+  <div class="buy-grid" id="buy-grid"></div>
+  <button class="btn" id="btn-start-round">START ROUND</button>
+</div>
+
+<div class="screen" id="screen-round">
+  <h2 id="round-title">ROUND WON</h2>
+  <div class="score-line"><span class="cyan" id="round-score-you">0</span> — <span class="magenta" id="round-score-foe">0</span></div>
+  <p id="round-detail">Enemy team eliminated.</p>
+  <button class="btn" id="btn-next-round">CONTINUE</button>
+</div>
+
+<div class="screen" id="screen-match">
+  <div class="tag">Match complete</div>
+  <h1 id="match-title">VICTORY</h1>
+  <div class="score-line"><span class="cyan" id="match-score-you">5</span> — <span class="magenta" id="match-score-foe">3</span></div>
+  <p id="match-detail">You breached the arena and took the match.</p>
+  <button class="btn" id="btn-restart">↻ &nbsp;PLAY AGAIN</button>
+</div>
+
+<div class="screen" id="screen-lock">
+  <h2>PAUSED</h2>
+  <p>Click to lock the mouse and keep playing.</p>
+  <button class="btn" id="btn-relock">RESUME</button>
+</div>
+
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.module.min.js" } }
+</script>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
